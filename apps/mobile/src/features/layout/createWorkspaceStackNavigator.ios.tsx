@@ -48,6 +48,7 @@ import {
   useNativeWorkspaceColumnsSupported,
 } from "../../native/NativeWorkspaceColumns";
 import { V5StackHeader } from "../../native/V5StackHeader.ios";
+import { InspectorBar } from "./inspector-bar";
 import { PaneContext } from "../../components/ui/Pane";
 import { useWorkspaceSidebarHeaderItem } from "./useWorkspaceSidebarHeaderItem";
 import type { AppNativeStackNavigationOptions } from "../../native/StackHeader";
@@ -248,6 +249,9 @@ function WorkspaceColumns(
       ? openNewTask
       : undefined;
   const inspector = use(NativeWorkspaceInspectorContext);
+  const hideInspector = () => {
+    if (inspector.visible) toggleAuxiliaryPane();
+  };
   const hostRef = useRef<SplitHostCommands>(null);
   const activeDetailKey = props.detail.at(-1)?.key;
   const compactColumn = activeDetailKey ? "secondary" : "primary";
@@ -369,9 +373,7 @@ function WorkspaceColumns(
       displayModeButtonVisibility="never"
       presentsWithGesture
       showInspector={inspector.visible}
-      onInspectorHide={() => {
-        if (inspector.visible) toggleAuxiliaryPane();
-      }}
+      onInspectorHide={hideInspector}
       columnMetrics={{
         minimumPrimaryColumnWidth: 280,
         maximumPrimaryColumnWidth: Math.max(380, layout.listPaneWidth ?? 0),
@@ -440,7 +442,9 @@ function WorkspaceColumns(
             vertical bar wherever they sit, so each pane insets its own content instead. */}
         <ColumnContent insetHorizontally={false}>
           <View className="flex-1 bg-screen">
-            <PaneContext value="inspector">{inspector.render?.()}</PaneContext>
+            <InspectorBar onClose={hideInspector}>
+              <PaneContext value="inspector">{inspector.render?.()}</PaneContext>
+            </InspectorBar>
             {inspector.visible ? (
               <GestureHandlerRootView
                 style={[StyleSheet.absoluteFill, { zIndex: 100 }]}

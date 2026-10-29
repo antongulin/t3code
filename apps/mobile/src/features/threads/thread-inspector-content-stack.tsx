@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 
 import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
+import { InspectorPane } from "../layout/inspector-bar";
 import { NativeInspectorContent } from "../../native/NativeInspectorContent";
 
 export type ThreadInspectorMode = "route" | "git" | "files" | "preview";
@@ -31,16 +32,18 @@ function InspectorContentPane(props: {
         zIndex: props.visible ? 1 : 0,
       }}
     >
-      <RenderErrorBoundary
-        resetKeys={props.resetKeys}
-        renderFallback={(fallback) => (
-          <NativeInspectorContent>
-            <RenderFailureView {...fallback} title="The inspector couldn't be displayed" />
-          </NativeInspectorContent>
-        )}
-      >
-        {props.children}
-      </RenderErrorBoundary>
+      <InspectorPane>
+        <RenderErrorBoundary
+          resetKeys={props.resetKeys}
+          renderFallback={(fallback) => (
+            <NativeInspectorContent>
+              <RenderFailureView {...fallback} title="The inspector couldn't be displayed" />
+            </NativeInspectorContent>
+          )}
+        >
+          {props.children}
+        </RenderErrorBoundary>
+      </InspectorPane>
     </View>
   );
 }
