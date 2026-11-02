@@ -210,3 +210,68 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 ## Additional tips
 
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+
+---
+
+## Fork DOX (antongulin/t3code)
+
+Everything above is upstream guidance, preserved verbatim. This section is the fork's own
+contract; it records scope and delivery rules for this checkout and changes no upstream behavior.
+
+### Purpose
+
+`antongulin/t3code` is an owner-controlled fork of `pingdotgg/t3code`. It carries a small local
+backport on the installed 0.1.6 source and produces private local preview artifacts. Delivery stays
+inside this fork: no upstream pull request, signed release or maintainer commitment is implied.
+
+### Ownership
+
+- `maintenance/boo-194-0.1.6` is the delivery base. It mirrors the source of the installed 0.1.6
+  artifact and receives only reviewed backports.
+- `main` mirrors upstream `pingdotgg/t3code` and is synchronized separately. Do not rebase the
+  maintenance base onto it for a narrow fix.
+- The fork owner holds standing authority for branches, pull requests, review bootstrap and
+  accepted squashed merges here. That authority does not extend to `pingdotgg/t3code`.
+
+### Local Contracts
+
+- Read `~/.agents/instructions/WORKFLOW.md`; if absent, use the
+  [canonical shared workflow](https://github.com/antongulin/baseline/blob/main/baseline/02-agents.md).
+- Keep credentials, model keys, account identities, live host addresses and private execution
+  receipts outside Git. Examples use placeholders.
+- Fork review runs from `.github/workflows/code-review.yml` only. Do not enable inherited upstream
+  workflows, add a full CI replacement or route reviews through another provider.
+- New workflow jobs use standard Ubicloud runners. Robin takes its runner as a JSON-encoded string,
+  for example `runner: '"ubicloud-standard-2"'`. No GitHub-hosted or Fast fallback.
+- The owner's standing policy already authorizes pull requests in this fork. The upstream "never
+  make a PR unless asked" rule governs `pingdotgg/t3code`, not this fork.
+- Build with this revision's pins: Node 26.12.1, pnpm 12.14.0 and the catalog versions such as
+  Vite+ 1.4.0. Tooling is installed per task with a command-scoped `PATH`; never change the default
+  Node, the global shell or client configuration, and do not upgrade dependencies as part of a
+  backport.
+- `T3CODE_HOME` isolates server state but not the packaged desktop Electron profile. Do not run a
+  second packaged app against shared state, patch the installed ASAR or change `HOME`.
+
+### Work Guidance
+
+- Read this file and the contracts for the paths you will touch before editing. Re-read them rather
+  than relying on memory.
+- Keep upstream text byte-for-byte. Fork scope, pointers and provenance belong in this section.
+  The upstream rules on plans, notes and scratch files still apply.
+- Prefer a minimal reviewed backport over importing newer upstream commits and migrations.
+
+### Verification
+
+- Run the focused tests for the changed behavior with the pinned toolchain, plus `git diff --check`
+  and a sensitive-content scan of the exact staged diff.
+- Run `vp run check:changed` before pushing when the restored tooling supports it. The upstream
+  prohibition on repo-wide checks still applies.
+- Workflow changes: `actionlint .github/workflows/<file>`.
+
+### Child DOX Index
+
+None. The root owns this small fork scope; add a child only for a real separate boundary.
+
+Fork guidance adapted from [agent0ai/dox](https://github.com/agent0ai/dox) revision
+`765ae4ac02cc884eefcd41a3d0f71941721adb89`, retrieved 2026-11-02. MIT notice:
+[docs/dox-LICENSE.txt](docs/dox-LICENSE.txt).

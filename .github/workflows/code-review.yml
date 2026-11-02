@@ -1,0 +1,25 @@
+name: Robin
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: read # required since robin#70 (2026-07-08) for superseded-run detection
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # Reviews run on PR open and on authorized `/robin` comments. Pushes to an
+    # open PR do not trigger another review; the Robin skill controls rounds.
+    uses: antongulin/robin/.github/workflows/review.yml@main
+    with:
+      runner: '"ubicloud-standard-2"'
+      reasoning-effort: max
+    secrets:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
