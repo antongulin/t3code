@@ -546,9 +546,10 @@ const ConversationTimeline = memo(function ConversationTimeline({
     });
   };
 
-  const suspendEndScrollMaintenanceForDisclosure = (anchorKey: string) => {
+  const suspendEndScrollMaintenanceForDisclosure = (anchorKey: string, holdScroll = false) => {
     disclosureAnchorKeyRef.current = anchorKey;
-    disclosurePinsEndRef.current = resolveTimelineIsAtEnd(listRef.current?.getState()) === true;
+    disclosurePinsEndRef.current =
+      !holdScroll && resolveTimelineIsAtEnd(listRef.current?.getState()) === true;
     setDisclosureToggleSettling(true);
     scheduleDisclosureSettle();
   };
@@ -583,12 +584,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
       return next;
     });
   };
-  // Opening keeps a followed timeline at its end, so the history lands above
-  // the composer instead of under it. Closing behaves like any collapsing
-  // disclosure.
   const onToggleWorkingHistory = (key: string) => {
     // Either way the bar holds still: the history grows and shrinks below it.
-    suspendEndScrollMaintenanceForDisclosure("working-indicator-row");
+    suspendEndScrollMaintenanceForDisclosure("working-indicator-row", true);
+    const list = listRef.current;
+    if (list) void list.scrollToOffset({ offset: list.getState().scroll, animated: false });
     setWorkingHistoryKey((current) => (current === key ? null : key));
   };
   const onToggleAttemptFold = (attemptId: RunAttemptId) => {
@@ -696,6 +696,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     windowlessCitation,
     activeFindEntryId,
   });
+  const workingHistoryOpen = rows.some(
+    (row) => row.kind === "working" && row.window?.historyOpen === true,
+  );
   // Opens whatever hides a cited response. False when nothing does, so the citation stops waiting.
   const revealCitedEntry = (entryId: string, runId: RunId | null) => {
     const fold = timelineTurnFoldRunIdsByEntryId({
@@ -1459,7 +1462,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
                 anchoredEndSpace ||
                 !liveFollowEnabled ||
                 fullscreenAppRowId !== null ||
-                disclosureToggleSettling
+                disclosureToggleSettling ||
+                workingHistoryOpen
                   ? false
                   : isWorking && !prefersReducedMotion && settlingListIdentity === null
                     ? TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH
