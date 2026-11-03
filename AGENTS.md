@@ -221,8 +221,10 @@ contract; it records scope and delivery rules for this checkout and changes no u
 ### Purpose
 
 `antongulin/t3code` is an owner-controlled fork of `pingdotgg/t3code`. It carries a small local
-backport on the installed 0.1.6 source and produces private local preview artifacts. Delivery stays
-inside this fork: no upstream pull request, signed release or maintainer commitment is implied.
+backport on source revision `2359643cffa6ba9ee84d6f2694b935de54a8013e`, embedded in the installed
+0.1.6 artifact (the source manifests read 0.1.5), and produces private local preview artifacts.
+Delivery stays inside this fork: no upstream pull request, signed release or maintainer commitment
+is implied.
 
 ### Ownership
 
