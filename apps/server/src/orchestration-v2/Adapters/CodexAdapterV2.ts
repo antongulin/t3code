@@ -1082,9 +1082,8 @@ function codexErrorInfoCode(value: unknown): string | null {
 type CodexErrorInfo = CodexSchema.ServerNotification__CodexErrorInfo;
 
 /**
- * Retry exhaustion only says why it failed through the last attempt's HTTP
- * status. Exhaustion on 429 is a usage or rate limit, so it keeps the Limited
- * state and resume controls; other statuses stay provider or transport errors.
+ * Retry exhaustion only reports the last attempt's HTTP status when it has one.
+ * A status is request evidence, not proof that the subscription ran out.
  */
 function codexExhaustionHttpStatus(errorInfo: CodexErrorInfo | null | undefined): number | null {
   return typeof errorInfo === "object" &&
@@ -1094,15 +1093,13 @@ function codexExhaustionHttpStatus(errorInfo: CodexErrorInfo | null | undefined)
     : null;
 }
 
-function codexUsageLimitError(
-  code: string | null,
-  errorInfo: CodexErrorInfo | null | undefined,
-): boolean {
-  return (
-    code === "usageLimitExceeded" ||
-    code === "rateLimitExceeded" ||
-    codexExhaustionHttpStatus(errorInfo) === 429
-  );
+/**
+ * Only Codex naming the subscription usage limit proves exhausted allowance.
+ * Rate pressure, retry exhaustion and a bare 429 leave the request as a
+ * provider error with its native diagnostic.
+ */
+function codexUsageLimitError(code: string | null): boolean {
+  return code === "usageLimitExceeded";
 }
 
 /**
@@ -1126,6 +1123,7 @@ interface ActiveCodexTurnContext {
   latestProviderFailure?: {
     readonly nativeMessage: string;
     readonly nativeCode: string | null;
+    readonly nativeExhaustionStatus: number | null;
     readonly failure: OrchestrationV2ProviderFailure;
   };
   readonly nativeStartReady?: Deferred.Deferred<void>;
@@ -1156,6 +1154,7 @@ interface ActiveCodexProviderRetry {
   readonly context?: ActiveCodexTurnContext;
   readonly nativeMessage: string;
   readonly nativeCode: string | null;
+  readonly nativeExhaustionStatus: number | null;
   readonly retry: OrchestrationV2ProviderRetry;
   readonly failure: OrchestrationV2ProviderFailure;
   readonly startedAt: DateTime.Utc;
@@ -4591,11 +4590,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               context.latestProviderFailure = {
                 nativeMessage: payload.error.message,
                 nativeCode: notificationCode,
+                nativeExhaustionStatus: codexExhaustionHttpStatus(payload.error.codexErrorInfo),
                 failure: withCodexManagedFailure(
                   makeProviderFailure({
                     message: payload.error.additionalDetails?.trim() || payload.error.message,
                     code: notificationCode,
-                    class: codexUsageLimitError(notificationCode, payload.error.codexErrorInfo)
+                    class: codexUsageLimitError(notificationCode)
                       ? "usage_limit"
                       : "provider_error",
                   }),
@@ -4621,7 +4621,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     ? payload.error.message
                     : additionalDetails,
                 code,
-                class: codexUsageLimitError(code, payload.error.codexErrorInfo)
+                class: codexUsageLimitError(code)
                   ? "usage_limit"
                   : code?.startsWith("http") === true || code?.startsWith("responseStream") === true
                     ? "transport_error"
@@ -4637,6 +4637,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               ...(previous?.context === undefined ? {} : { context: previous.context }),
               nativeMessage: payload.error.message,
               nativeCode: code,
+              nativeExhaustionStatus: codexExhaustionHttpStatus(payload.error.codexErrorInfo),
               retry,
               failure,
               startedAt: previous?.startedAt ?? updatedAt,
@@ -5689,19 +5690,21 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 input.failureErrorInfo === undefined
                   ? undefined
                   : codexErrorInfoCode(input.failureErrorInfo);
-              const failureClass = codexUsageLimitError(failureCode ?? null, input.failureErrorInfo)
+              const failureClass = codexUsageLimitError(failureCode ?? null)
                 ? "usage_limit"
                 : "provider_error";
-              // The notification carries the richer message, so it wins when the
-              // completion repeats it. An explicit exhaustion status on the
-              // completion still decides the class; a missing one is not evidence.
+              // The notification carries the richer message, so it wins when it
+              // agrees with the completion evidence. Explicit completion status
+              // or code evidence overrides stale notification details, even when
+              // both failures share a class; a missing status is not evidence.
               const exhaustionStatus = codexExhaustionHttpStatus(input.failureErrorInfo);
               const failure =
                 previousFailure !== undefined &&
                 (input.failureMessage === undefined ||
                   input.failureMessage === previousFailure.nativeMessage) &&
                 (failureCode === undefined || failureCode === previousFailure.nativeCode) &&
-                (exhaustionStatus === null || previousFailure.failure.class === failureClass)
+                (exhaustionStatus === null ||
+                  exhaustionStatus === previousFailure.nativeExhaustionStatus)
                   ? previousFailure.failure
                   : withCodexManagedFailure(
                       makeProviderFailure({
@@ -6347,6 +6350,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   context.latestProviderFailure?.nativeMessage ??
                   "Selected model is at capacity.",
                 nativeCode: code,
+                nativeExhaustionStatus: codexExhaustionHttpStatus(terminal.failureErrorInfo),
                 failure: makeProviderFailure({
                   message:
                     context.latestProviderFailure?.failure.message ?? terminal.failureMessage,

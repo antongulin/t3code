@@ -5073,7 +5073,48 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       code: "responseTooManyFailedAttempts",
       errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 429 } },
       notification: false,
-      expectedClass: "usage_limit",
+      expectedClass: "provider_error",
+    },
+    {
+      name: "exhausted-429-notification",
+      code: "responseTooManyFailedAttempts",
+      errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 429 } },
+      notification: true,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "exhausted-429-retry",
+      code: "responseTooManyFailedAttempts",
+      errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 429 } },
+      notification: true,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "exhausted-429-missing-status",
+      code: "responseTooManyFailedAttempts",
+      errorInfo: { responseTooManyFailedAttempts: {} },
+      notification: false,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "exhausted-429-null-status",
+      code: "responseTooManyFailedAttempts",
+      errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: null } },
+      notification: false,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "exhausted-429-snapshot",
+      code: "responseTooManyFailedAttempts",
+      errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 429 } },
+      notification: false,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "rate-limit-exceeded",
+      code: "rateLimitExceeded",
+      notification: false,
+      expectedClass: "provider_error",
     },
     {
       name: "exhausted-500",
@@ -5114,6 +5155,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           scenario: `codex-limit-${scenario.name}`,
           entries: [
             ...codexReplayPreamble({ nativeThreadId, nativeTurnId, prompt: "Continue." }),
+            ...(scenario.name === "exhausted-429-snapshot" ? [snapshot] : []),
             ...(scenario.name === "deferred-reset" ? [snapshot] : []),
             ...(scenario.name === "deferred-reset"
               ? [
@@ -5161,7 +5203,8 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                       params: {
                         threadId: nativeThreadId,
                         turnId: nativeTurnId,
-                        willRetry: scenario.name === "retry",
+                        willRetry:
+                          scenario.name === "retry" || scenario.name === "exhausted-429-retry",
                         error: {
                           message,
                           codexErrorInfo: errorInfo,
@@ -5256,8 +5299,20 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         const terminal = harness.terminalEvents()[0];
         assert.equal(terminal?.status, "failed");
         if (terminal?.status !== "failed") return;
+        assert.equal(harness.terminalEvents().length, 1);
         assert.equal(terminal.failure.class, scenario.expectedClass);
         assert.equal(terminal.threadDisposition, "reusable");
+        if (scenario.expectedClass === "provider_error")
+          assert.isUndefined(terminal.failure.resetAt);
+        if (scenario.code === "responseTooManyFailedAttempts") {
+          assert.equal(terminal.failure.code, "responseTooManyFailedAttempts");
+          if (scenario.expectedClass === "provider_error")
+            assert.equal(terminal.failure.message, message);
+        }
+        if (scenario.name === "rate-limit-exceeded") {
+          assert.equal(terminal.failure.code, "rateLimitExceeded");
+          assert.equal(terminal.failure.message, message);
+        }
         if (scenario.name === "deferred-reset") assert.equal(terminal.failure.resetAt, resetAt);
         if (scenario.name === "matching-details")
           assert.equal(terminal.failure.message, "Detailed provider allowance explanation.");
@@ -5271,7 +5326,8 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           );
           assert.isDefined(item);
         }
-        if (scenario.name === "retry") assert.equal(terminal.retry?.attempt, 1);
+        if (scenario.name === "retry" || scenario.name === "exhausted-429-retry")
+          assert.equal(terminal.retry?.attempt, 1);
         if (scenario.name === "chatgpt-workspace-limit") {
           assert.equal(terminal.failure.code, scenario.details);
           assert.include(terminal.failure.message, "workspace admin");
@@ -5284,35 +5340,74 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     ),
   );
 
-  // regression: #17501 Codex 429 retry exhaustion classifies as a usage limit
+  // regression: explicit completion status evidence outweighs contradictory notification details
   it.effect.each([
     {
       notificationStatus: 500,
       completionStatus: 429,
       willRetry: false,
-      expectedClass: "usage_limit",
+      expectedClass: "provider_error",
+      expectedMessageSource: "native",
     },
     {
       notificationStatus: 429,
       completionStatus: 500,
       willRetry: true,
       expectedClass: "provider_error",
+      expectedMessageSource: "native",
     },
     {
       notificationStatus: 429,
       completionStatus: null,
       willRetry: false,
-      expectedClass: "usage_limit",
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
     },
     {
       notificationStatus: 429,
       completionStatus: null,
       willRetry: true,
-      expectedClass: "usage_limit",
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
+    },
+    {
+      notificationStatus: 429,
+      completionStatus: 429,
+      willRetry: false,
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
+    },
+    {
+      notificationStatus: 429,
+      completionStatus: 429,
+      willRetry: true,
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
+    },
+    {
+      notificationStatus: 500,
+      completionStatus: 401,
+      willRetry: false,
+      expectedClass: "provider_error",
+      expectedMessageSource: "native",
+    },
+    {
+      notificationStatus: 500,
+      completionStatus: null,
+      willRetry: false,
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
+    },
+    {
+      notificationStatus: 500,
+      completionStatus: 500,
+      willRetry: true,
+      expectedClass: "provider_error",
+      expectedMessageSource: "notification",
     },
   ] as const)(
     "honors completion HTTP status from $notificationStatus to $completionStatus (retry: $willRetry)",
-    ({ notificationStatus, completionStatus, expectedClass, willRetry }) =>
+    ({ notificationStatus, completionStatus, expectedClass, expectedMessageSource, willRetry }) =>
       Effect.scoped(
         Effect.gen(function* () {
           const name = `${notificationStatus}-${completionStatus}-${willRetry}`;
@@ -5378,13 +5473,14 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           const terminal = harness.terminalEvents()[0];
           assert.equal(terminal?.status, "failed");
           if (terminal?.status !== "failed") return;
+          assert.equal(harness.terminalEvents().length, 1);
           assert.equal(terminal.failure.class, expectedClass);
           assert.equal(terminal.failure.code, "responseTooManyFailedAttempts");
           assert.equal(terminal.threadDisposition, "reusable");
-          const notificationClass = notificationStatus === 429 ? "usage_limit" : "provider_error";
+          assert.isUndefined(terminal.failure.resetAt);
           assert.equal(
             terminal.failure.message,
-            expectedClass === notificationClass ? additionalDetails : message,
+            expectedMessageSource === "notification" ? additionalDetails : message,
           );
           if (willRetry) assert.equal(terminal.retry?.attempt, 1);
         }).pipe(
