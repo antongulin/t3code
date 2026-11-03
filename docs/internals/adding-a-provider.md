@@ -97,6 +97,8 @@ produce catches them.
   provider failure, and process exit.
 - **Usage limits are not generic failures.** Classify quota and rate-limit errors as `usage_limit`
   with a reset time when the provider gives one, so the thread shows Limited and can resume.
+  For Codex, only `usageLimitExceeded` proves exhausted allowance; `rateLimitExceeded` and HTTP 429
+  retry exhaustion stay `provider_error` and keep the native diagnostic.
 - **Paths and environment.** Test a symlinked workspace, such as macOS `/tmp`; an agent that
   compares canonical paths fails every turn there. Drop inherited credentials the instance did not
   configure. Report unknown sign-in as unknown rather than as signed in.
