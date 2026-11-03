@@ -5117,6 +5117,18 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       expectedClass: "provider_error",
     },
     {
+      name: "rate-limit-exceeded-notification",
+      code: "rateLimitExceeded",
+      notification: true,
+      expectedClass: "provider_error",
+    },
+    {
+      name: "rate-limit-exceeded-retry",
+      code: "rateLimitExceeded",
+      notification: true,
+      expectedClass: "provider_error",
+    },
+    {
       name: "exhausted-500",
       code: "responseTooManyFailedAttempts",
       errorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 500 } },
@@ -5204,7 +5216,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                         threadId: nativeThreadId,
                         turnId: nativeTurnId,
                         willRetry:
-                          scenario.name === "retry" || scenario.name === "exhausted-429-retry",
+                          scenario.name === "retry" ||
+                          scenario.name === "exhausted-429-retry" ||
+                          scenario.name === "rate-limit-exceeded-retry",
                         error: {
                           message,
                           codexErrorInfo: errorInfo,
@@ -5309,7 +5323,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           if (scenario.expectedClass === "provider_error")
             assert.equal(terminal.failure.message, message);
         }
-        if (scenario.name === "rate-limit-exceeded") {
+        if (scenario.code === "rateLimitExceeded") {
           assert.equal(terminal.failure.code, "rateLimitExceeded");
           assert.equal(terminal.failure.message, message);
         }
@@ -5326,7 +5340,11 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           );
           assert.isDefined(item);
         }
-        if (scenario.name === "retry" || scenario.name === "exhausted-429-retry")
+        if (
+          scenario.name === "retry" ||
+          scenario.name === "exhausted-429-retry" ||
+          scenario.name === "rate-limit-exceeded-retry"
+        )
           assert.equal(terminal.retry?.attempt, 1);
         if (scenario.name === "chatgpt-workspace-limit") {
           assert.equal(terminal.failure.code, scenario.details);
